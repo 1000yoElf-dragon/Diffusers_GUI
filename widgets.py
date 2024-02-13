@@ -155,8 +155,6 @@ class HistoryCombo(ttk.Frame):
 
 
 class ChooseDir(HistoryCombo):
-    # <a target="_blank" href="https://icons8.com/icon/WWogVNJDSfZ5/folder">Folder</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
-
     @staticmethod
     def samedir(dir1, dir2):
         try:
