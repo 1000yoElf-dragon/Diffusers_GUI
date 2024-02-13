@@ -3,10 +3,12 @@ from tkinter import N, S, E, W, NW, SW, NE, SE, HORIZONTAL, VERTICAL, RIGHT
 from tkinter import ttk, messagebox
 from math import sqrt, floor
 from diffusers.utils import make_image_grid
+from yaml import YAMLError
 
-from widgets import HistoryCombo, HistoryText, DasScala, SeedEntry, ChooseDir, ImageBox, Size, CheckBox, InitImageBox
+from widgets import HistoryCombo, PromptBox, DasScala, SeedEntry, ChooseDir, ImageBox, Size, CheckBox, InitImageBox
 from diffusershandler import DiffusersHandler
-from utils import repo_key, check_bool_opt, file_naming, valid_fname, SubstituteImage, load_yaml, save_yaml
+from utils import repo_key, check_bool_opt, file_naming, not_include, SubstituteImage, load_yaml, save_yaml
+from filehandlers import image_files
 
 
 class MainFrame(ttk.Frame):
@@ -14,7 +16,21 @@ class MainFrame(ttk.Frame):
         super(MainFrame, self).__init__(root, padding="3 3 12 12")
 
         self.config_file = config_file
-        self.app_config = load_yaml(self.config_file, defautl_fname="default.yml", default={})
+
+        try:
+            self.app_config = load_yaml(self.config_file, default_fname="default.yml", default={})
+        except Exception as error:
+            if messagebox.askokcancel(
+                    title="Warning!", message="It seems configuration file is broken. Create default configuration?"
+            ):
+                try:
+                    self.app_config = load_yaml("default.yml", default={})
+                    if self.app_config is None:
+                        self.app_config = {}
+                except (OSError, IOError, YAMLError):
+                    self.app_config = {}
+            else:
+                raise error
 
         self.diffusers_handler = DiffusersHandler(
             cache_dir=self.app_config.setdefault('cache_dir', "cache"),
@@ -53,10 +69,16 @@ class MainFrame(ttk.Frame):
         self.checkbox.grid(column=1, row=2, sticky=W, padx=5, pady=5)
 
         # Prompt
-        self.prompt = HistoryText(self, "Prompt", width=80, height=5)
+        self.prompt = PromptBox(self, "Prompt", width=80, height=5,
+                                adprompt_path=self.app_config.setdefault('adprompt_path', "adprompt"),
+                                adprompt_history=self.app_config.setdefault('adprompt_history', []))
         self.prompt.grid(column=1, row=3, sticky=E+W+N+S, padx=5, pady=5)
-        self.neg_prompt = HistoryText(self, "Negative prompt", width=80, height=5)
+        self.prompt.add_history()
+        self.neg_prompt = PromptBox(self, "Negative prompt", width=80, height=5,
+                                    adprompt_path=self.app_config['adprompt_path'],
+                                    adprompt_history=self.app_config.setdefault('neg_adprompt_history', []))
         self.neg_prompt.grid(column=1, row=4, sticky=E+W+N+S, padx=5, pady=5)
+        self.prompt.add_history()
 
         # Guidance scale
         self.guidance = DasScala(self, "Guidance scale",
@@ -83,7 +105,7 @@ class MainFrame(ttk.Frame):
 
         # Run button
         self.run_button = ttk.Button(self, text="Run", command=lambda *args: self.run())
-        self.run_button.grid(column=2, row=7, stick=S)
+        self.run_button.grid(column=2, row=7, padx=5, pady=5)
 
         # Output
         self.output = ImageBox(self, width=640, height=640, default_image_file="Icons/noimage_gray.png")
@@ -94,7 +116,8 @@ class MainFrame(ttk.Frame):
         self.imsize.grid(column=3, row=6, sticky=SW, padx=5, pady=5)
 
         # File name prefix
-        def validate_prefix(val): return val.endswith("?.png") and valid_fname(val.removesuffix("?.png").rstrip("?"))
+        validate_fname = not_include('\\/:*?»<>|')
+        def validate_prefix(val): return val.endswith("?.png") and validate_fname(val.removesuffix("?.png").rstrip("?"))
         self.prefix = HistoryCombo(
             self, "Filename prefix: ", width=40,
             history=self.app_config.setdefault('filename_prefix_history', []),
@@ -142,6 +165,7 @@ class MainFrame(ttk.Frame):
             block_nsfw = self.checkbox['nsfw'].get()
             connect = self.checkbox['connect'].get()
             init_image_file, strength = self.init_img.get()
+            self.init_img.add_history()
 
             stage = "Load repo"
             repo_name = self.repo.get()
@@ -164,7 +188,7 @@ class MainFrame(ttk.Frame):
                 if image is not None:
                     fname = next(fnames)
                     to_show.append(image)
-                    image.save(fname)
+                    image_files.save(fname, image)
                     save_yaml(fname + ".prm", properties)
                 else:
                     to_show.append(self.substitute_image.subst(*actual_size))
