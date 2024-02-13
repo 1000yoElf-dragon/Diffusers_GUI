@@ -1,5 +1,7 @@
 Windows TCL/TK graphical interface for [diffusers](https://github.com/huggingface/diffusers) library  
   
+![Picture](Icons/picture.png)  
+  
 Framework: python, tkinter  
   
 Config: "config.yml"  
