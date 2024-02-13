@@ -1,10 +1,12 @@
+import os
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 from numpy import random
 from PIL import ImageTk, Image
-import os
-from utils import image_fit
+
+from utils import image_fit, not_include, normalize_space_commas, append_non_zero
+from filehandlers import text_files, image_files
 
 
 class VarChecker:
@@ -52,7 +54,7 @@ class VarChecker:
         return parent.register(lambda val: self.input_control(val)), '%P'
 
     def bind(self, widget):
-        widget.bind("<FocusOut>", lambda *args: self.final_check())
+        widget.bind('<FocusOut>', lambda *args: self.final_check())
 
 
 class CheckBox(ttk.Frame):
@@ -164,7 +166,7 @@ class ChooseDir(HistoryCombo):
 
     def __init__(self, parent, label, width, history, max_history=20):
         super().__init__(parent, label, width, history, max_history=max_history, is_eq_func=ChooseDir.samedir)
-        self.icon = PhotoImage(file="Icons//icons8-folder-windows-11-color-16.png")
+        self.icon = PhotoImage(file="Icons/icons8-folder-windows-11-color-32.png")
 
         self.button = ttk.Button(self, image=self.icon, command=lambda *args: self.ask_dir())
         self.button.grid(column=2, row=0, sticky=W, padx=5, pady=5)
@@ -189,9 +191,14 @@ class ChooseDir(HistoryCombo):
         return folder
 
 
-class HistoryText(ttk.LabelFrame):
-    def __init__(self, parent, label, width, height, init="", undo=True, maxundo=8192, max_history=50):
+class PromptBox(ttk.LabelFrame):
+    def __init__(self, parent, label, width, height,
+                 adprompt_path, adprompt_history, adprompt_max_history=20,
+                 init="", maxundo=8192, max_history=50):
         super().__init__(parent, text=label)
+        self.adprompt_path = adprompt_path
+        self.icon = PhotoImage(file="Icons/icons8-add-32.png")
+
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.rowconfigure(1, weight=1)
@@ -200,9 +207,18 @@ class HistoryText(ttk.LabelFrame):
         self.current = -1
         self.max_history = max_history
 
-        self.text = ScrolledText(self, width=width, height=height, undo=undo, maxundo=maxundo)
+        self.text = ScrolledText(self, width=width, height=height, undo=True, maxundo=maxundo, wrap=WORD)
         self.text.grid(column=0, row=1, columnspan=2, sticky=W+E+N+S, padx=5, pady=5)
         self.set(init)
+
+        self.adprompt = HistoryCombo(self, "adPrompt: ", width,
+                                     adprompt_history, max_history=adprompt_max_history,
+                                     is_eq_func=None, validator=not_include('\\/:*»<>|'), readonly=False)
+        self.adprompt.entry.bind('<FocusOut>', lambda *args: self.adprompt_validate())
+        self.plus_ad_button = ttk.Button(self.adprompt, image=self.icon,
+                                         command=lambda *args: self.plus_ad())
+        self.plus_ad_button.grid(column=2, row=0, padx=5, pady=5)
+        self.adprompt.grid(column=0, row=2, columnspan=2, sticky=W + E + N + S, padx=5, pady=5)
 
         # Edit buttons
         self.edit_buttons = Frame(self)
@@ -221,6 +237,96 @@ class HistoryText(ttk.LabelFrame):
         self.edit_buttons.grid(column=0, row=0, sticky=W, padx=5, pady=5)
         self.history_buttons.grid(column=1, row=0, sticky=E, padx=5, pady=5)
 
+    def adprompt_validate(self):
+        adprompt = self.adprompt.get().strip()
+        if not adprompt.strip('+ \t\n\r'):
+            self.adprompt.set("?")
+            return "?"
+        if adprompt[0] == '+':
+            adprompt = '? ' + adprompt
+        if adprompt[-1] == '+':
+            adprompt += ' ?'
+        if '?' not in adprompt:
+            adprompt = '? + ' + adprompt
+        self.adprompt.set(adprompt)
+        return adprompt
+
+    def plus_ad(self):
+        pass
+
+    def read_adprompt(self, name, missed: dict = None):
+        if not name:
+            return ""
+        if missed is None:
+            missed = {}
+        name = name.strip().lower()
+        if name in missed:
+            return ""
+        if name[0] in {'"', "'"}:
+            closing = name.find(name[0], 1)
+            if closing != len(name) - 1:
+                missed[name] = "Wrong quotes"
+                return ""
+            return self.read_adprompt(name[1:-1], missed)
+        try:
+            filename = name
+            if not os.path.dirname(filename):
+                if not os.path.splitext(filename)[1]:
+                    filename += ".txt"
+                filename = os.path.join(self.adprompt_path, filename)
+            return text_files.load(filename).strip()
+        except Exception as error:
+            missed[name] = str(error)
+            return ""
+
+    def get(self):
+        missed = {}
+        prompt = self.text.get('0.0', END)
+        prompt_seq = []
+        length = len(prompt)
+        pos = 0
+        while pos < length:
+            next_pos = prompt.find('@<', pos)
+            next_pos = next_pos if next_pos != -1 else length
+            append_non_zero(prompt_seq, prompt[pos:next_pos].strip())
+            pos = next_pos+2
+            if pos >= length:
+                break
+            next_pos = prompt.find('>', pos)
+            next_pos = next_pos if next_pos != -1 else length
+            append_non_zero(prompt_seq, self.read_adprompt(prompt[pos:next_pos], missed))
+            pos = next_pos+1
+
+        result_seq = []
+
+        for compound in self.adprompt_validate().split('+'):
+            compound = compound.strip()
+            if not compound:
+                continue
+            if compound[0] == '?':
+                result_seq += prompt_seq
+            else:
+                if compound:
+                    result_seq.append(self.read_adprompt(compound, missed))
+
+        if missed:
+            message = "Can't load adprompt(s). Continue anyway?\n\n"
+            for i, (name, error) in enumerate(missed.items()):
+                message += f"{name}: {error}\n"
+                if i >= 10:
+                    message += '...'
+                    break
+            if not messagebox.askokcancel("Adprompt ERROR", message):
+                raise ValueError("Wrong adprompt(s)")
+
+        result = normalize_space_commas(', '.join(result_seq))
+        return result
+
+    def set(self, txt):
+        self.text.delete('0.0', END)
+        self.text.insert('0.0', txt)
+        self.text.edit_modified(True)
+
     def update_buttons(self):
         if len(self.history) == 0:  # or self.current == 0 and not self.text.edit_modified():
             self.back_button.config(state=DISABLED)
@@ -232,15 +338,8 @@ class HistoryText(ttk.LabelFrame):
         else:
             self.forward_button.config(state=NORMAL)
 
-    def get(self):
-        return self.text.get('0.0', END)
-
-    def set(self, txt):
-        self.text.delete('0.0', END)
-        self.text.insert('0.0', txt)
-        self.text.edit_modified(True)
-
     def add_history(self):
+        self.adprompt.add_history()
         if not self.history or self.text.edit_modified():
             self.history.append(self.text.get('0.0', END))
         elif 0 <= self.current < len(self.history):
@@ -454,7 +553,7 @@ class ImageBox(Canvas):
         self.veil_id = None
 
         if default_image_file is not None:
-            def_img = Image.open(default_image_file)
+            def_img = image_files.load(default_image_file)
             w, h = def_img.size
             if w > self.width or h > self.height:
                 def_img = image_fit(def_img, self.width, self.height)
@@ -478,7 +577,7 @@ class ImageBox(Canvas):
         self.img_id = self.create_image(0, 0, anchor=NW, image=self.default_image)
 
     def load(self, image_file):
-        self.set(Image.open(image_file))
+        self.set(image_files.load(image_file))
 
     def set(self, image):
         self.original_image = image
@@ -503,7 +602,7 @@ class InitImageBox(ttk.LabelFrame):
         self.chk_button = ttk.Checkbutton(text=label, variable=self.checked_var, command=lambda *args: self.check())
 
         super().__init__(parent, labelwidget=self.chk_button)
-        self.icon = PhotoImage(file="Icons//icons8-opened-folder-windows-11-color-16.png")
+        self.icon = PhotoImage(file="Icons//icons8-opened-folder-windows-11-color-32.png")
         self.history = history
         self.active = False
 
@@ -518,7 +617,9 @@ class InitImageBox(ttk.LabelFrame):
 
         self.file_combo = HistoryCombo(self, "Image file", width=width,
                                        history=history, max_history=max_history, readonly=True)
+        self.file_combo.set("")
         self.file_combo.disable()
+        self.file_combo.entry.bind('<<ComboboxSelected>>', lambda *args: self.set(self.file_combo.get()))
         self.file_combo.grid(column=1, row=1, sticky=W+E, padx=5, pady=5)
 
         self.slider = DasScala(
@@ -563,7 +664,6 @@ class InitImageBox(ttk.LabelFrame):
                 )
                 return
             self.file_combo.set(value=fname)
-            self.file_combo.add_history()
 
     def open(self):
         opts = {
@@ -571,8 +671,9 @@ class InitImageBox(ttk.LabelFrame):
             'filetypes': [("Image file", InitImageBox.image_file_exts)],
             'multiple': False
         }
-
         if len(self.history) > 0:
             opts['initialfile'] = self.history[0]
-
         self.set(filedialog.askopenfilename(**opts))
+
+    def add_history(self):
+        self.file_combo.add_history()
