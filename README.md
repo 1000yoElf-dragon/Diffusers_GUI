@@ -4,6 +4,14 @@ Windows TCL/TK graphical interface for [diffusers](https://github.com/huggingfac
   
 Framework: python, tkinter  
   
+Requirements:  
+ - python v3.10 or later [Python](https://wiki.python.org/moin/BeginnersGuide/Download)
+ - pytorch v2.2 or later (GPU with CUDA recommended) [PyTorch](https://pytorch.org/get-started/locally/))
+ - Pillow v10.0 or later [Pillow](https://pillow.readthedocs.io/en/stable/installation.html)
+ - diffusers v0.26 or later [Diffusers] (https://huggingface.co/docs/diffusers/v0.26.2/en/quicktour)
+   - accelerate 
+   - transformers
+  
 Config: "config.yml"  
 ```
 cache_dir: cache          # Path to HuggingFace cache directory, default 'cache'
