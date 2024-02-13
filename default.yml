@@ -1,0 +1,8 @@
+cache_dir: "cache"
+max_models: 1
+use_cuda: true
+use_float16: true
+repo_history:
+- runwayml/stable-diffusion-v1-5
+- stabilityai/stable-diffusion-xl-base-1.0
+- dreamlike-art/dreamlike-anime-1.0
