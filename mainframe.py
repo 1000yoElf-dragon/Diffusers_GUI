@@ -1,15 +1,12 @@
 import os
 from tkinter import N, S, E, W, NW, SW, NE, SE, HORIZONTAL, VERTICAL, RIGHT
 from tkinter import ttk, messagebox
-import yaml
 from math import sqrt, floor
 from diffusers.utils import make_image_grid
 
 from widgets import HistoryCombo, HistoryText, DasScala, SeedEntry, ChooseDir, ImageBox, Size, CheckBox, InitImageBox
 from diffusershandler import DiffusersHandler
 from utils import repo_key, check_bool_opt, file_naming, valid_fname, SubstituteImage, load_yaml, save_yaml
-
-
 
 
 class MainFrame(ttk.Frame):
