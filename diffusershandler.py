@@ -1,10 +1,10 @@
 import os
 import torch
-from PIL import Image
 os.putenv('HF_HUB_DISABLE_SYMLINKS_WARNING', 'true')
 from diffusers import AutoPipelineForText2Image, AutoPipelineForImage2Image
 
 from utils import image_fit, repo_key
+from filehandlers import image_files
 
 
 class DiffusersHandler:
@@ -133,7 +133,8 @@ class DiffusersHandler:
                     num_inference_steps=num_inference_steps, generator=self.rng,
                     return_dict=True)
             else:
-                init_image = image_fit(Image.open(image_file), width, height, 32).convert('RGB')
+                init_image = image_files.load(image_file)
+                init_image = image_fit(init_image, width, height, 32).convert('RGB')
                 params['init_image'] = image_file
                 params['strength'] = strength
                 params['width'], params['height'] = init_image.size
