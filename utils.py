@@ -1,15 +1,121 @@
 import os.path
 from PIL import Image
 import yaml
+import re
+from heapq import heapify, heappop, heappush, heappushpop
+from typing import Dict, Any
 
 
-def load_yaml(fname: str, defautl_fname: str, default=None) -> dict:
+class QueueMap:
+    class Element:
+        __slots__ = ['key', 'value', 'priority', 'new_priority']
+
+        def __init__(self, key, value, priority):
+            self.key = key
+            self.value = value
+            self.new_priority = self.priority = priority
+
+        def __eq__(self, other):
+            return self.priority == other.priority
+
+        def __ne__(self, other):
+            return self.priority != other.priority
+
+        def __gt__(self, other):
+            return self.priority > other.priority
+
+        def __ge__(self, other):
+            return self.priority >= other.priority
+
+        def __lt__(self, other):
+            return self.priority < other.priority
+
+        def __le__(self, other):
+            return self.priority <= other.priority
+
+    __slots__ = ['heap', 'mapping', 'counter', 'max_size']
+    heap: list
+    mapping: dict
+    counter: int
+    max_size: int
+
+    def __init__(self, max_size=None):
+        super(QueueMap, self).__init__()
+        self.heap = []
+        self.mapping = {}
+        self.counter = 0
+        self.max_size = max_size
+
+    @classmethod
+    def from_dict(cls, mapping: dict, max_size=None):
+        heapmap = cls(max_size)
+        rest = len(mapping)
+        for key, value in mapping.items():
+            if max_size and rest > max_size:
+                rest -= 1
+                continue
+            heapmap.counter += 1
+            element = QueueMap.Element(key, value, heapmap.counter)
+            heapmap.mapping[key] = element
+            heapmap.heap.append(element)
+        heapify(heapmap.heap)
+        return heapmap
+
+    def __getitem__(self, key):
+        return self.mapping[key].value
+
+    def __setitem__(self, key, value):
+        self.mapping[key].value = value
+
+    def __contains__(self, key):
+        return key in self.mapping
+
+    def __len__(self):
+        return len(self.mapping)
+
+    def clear(self) -> None:
+        self.mapping.clear()
+        self.heap.clear()
+
+    def push(self, key, value):
+        self.counter += 1
+        if key in self.mapping:
+            self.mapping[key].value = value
+            self.mapping[key].new_priority = self.counter
+        else:
+            element = QueueMap.Element(key, value, self.counter)
+            if len(self.heap) == self.max_size:
+                old_element = heappushpop(self.heap, element)
+                while old_element.priority != old_element.new_priority:
+                    old_element.priority = old_element.new_priority
+                    old_element = heappushpop(self.heap, old_element)
+                del self.mapping[old_element.key]
+            self.mapping[key] = element
+
+    def to_back(self, key):
+        self.counter += 1
+        self.mapping[key].new_priority = self.counter
+
+    def pop(self):
+        element = heappop(self.heap)
+        while element.priority != element.new_priority:
+            element.priority = element.new_priority
+            element = heappushpop(self.heap, element)
+        del self.mapping[element.key]
+        return element.key, element.value
+
+    def exodus(self):
+        while len(self.heap):
+            yield self.pop()
+
+
+def load_yaml(fname: str, default_fname: str = None, default=None) -> dict:
     try:
         with open(fname, 'rt') as file:
             return yaml.safe_load(file) or {}
     except FileNotFoundError as error:
-        if defautl_fname is not None:
-            return load_yaml(defautl_fname, default)
+        if default_fname is not None:
+            return load_yaml(default_fname, default)
         if default is not None:
             return default
         else:
@@ -37,9 +143,22 @@ def check_bool_opt(config: dict, option, default: bool = None):
     return config[option]
 
 
-bad_chars = set('\\/:*?»<>|')
-def valid_fname(fname):
-    bad_chars.isdisjoint(fname)
+def not_include(bad_chars: str = '\\/:*?»<>|'):
+    bad_chars_set = set(bad_chars)
+    return lambda string: bad_chars_set.isdisjoint(string)
+
+
+pattern_space = re.compile(r'\s+')
+pattern_space_commas = re.compile('(?<=[\.,])[\s\.,]+|\s+')
+def normalize_space(s: str):
+    return re.sub(pattern_space, ' ', s).strip()
+def normalize_space_commas(s: str):
+    return re.sub(pattern_space_commas, ' ', s).strip()
+
+
+def append_non_zero(list_: list, value):
+    if value:
+        list_.append(value)
 
 
 def repo_key(repo_name: str) -> str:
