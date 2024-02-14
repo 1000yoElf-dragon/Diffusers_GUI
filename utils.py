@@ -2,7 +2,7 @@ import os.path
 from PIL import Image
 import yaml
 import re
-from heapq import heapify, heappop, heappush, heappushpop
+from heapq import heapify, heappop, heappushpop
 from typing import Dict, Any
 
 
@@ -35,7 +35,7 @@ class QueueMap:
 
     __slots__ = ['heap', 'mapping', 'counter', 'max_size']
     heap: list
-    mapping: dict
+    mapping: Dict[Any, Element]
     counter: int
     max_size: int
 
@@ -94,7 +94,9 @@ class QueueMap:
 
     def to_back(self, key):
         self.counter += 1
-        self.mapping[key].new_priority = self.counter
+        element = self.mapping[key]
+        element.new_priority = self.counter
+        return element.value
 
     def pop(self):
         element = heappop(self.heap)
@@ -125,7 +127,7 @@ def load_yaml(fname: str, default_fname: str = None, default=None) -> dict:
 def save_yaml(fname: str, mapping: dict):
     with open(fname, 'wt') as file:
         for key, value in mapping.items():
-            yaml.safe_dump({key: value}, file )
+            yaml.safe_dump({key: value}, file)
 
 
 TRUE_STR = {'yes', 'y', 'true', 't', 'on'}
@@ -149,11 +151,16 @@ def not_include(bad_chars: str = '\\/:*?»<>|'):
 
 
 pattern_space = re.compile(r'\s+')
-pattern_space_commas = re.compile('(?<=[\.,])[\s\.,]+|\s+')
+pattern_space_commas = re.compile(r'(?<=[.,])[\s.,]+|\s+')
 def normalize_space(s: str):
     return re.sub(pattern_space, ' ', s).strip()
 def normalize_space_commas(s: str):
     return re.sub(pattern_space_commas, ' ', s).strip()
+
+
+# TODO: create adequate qoute parser
+def strip_quotes(s: str) -> str:
+    return s.strip(' \t\r\n\'\"')
 
 
 def append_non_zero(list_: list, value):

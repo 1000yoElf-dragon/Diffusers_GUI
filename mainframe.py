@@ -5,7 +5,8 @@ from math import sqrt, floor
 from diffusers.utils import make_image_grid
 from yaml import YAMLError
 
-from widgets import HistoryCombo, PromptBox, DasScala, SeedEntry, ChooseDir, ImageBox, Size, CheckBox, InitImageBox
+from widgets.common import HistoryCombo, DasScala, SeedEntry, ChooseDir, ImageBox, Size, CheckBox, InitImageBox
+from widgets.promptbox import PromptBox
 from diffusershandler import DiffusersHandler
 from utils import repo_key, check_bool_opt, file_naming, not_include, SubstituteImage, load_yaml, save_yaml
 from filehandlers import image_files
@@ -46,8 +47,6 @@ class MainFrame(ttk.Frame):
             self.substitute_image = SubstituteImage("Icons/nsfw.png")
 
         self.grid(column=0, row=0, sticky=(N, W, E, S))
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=1)
         self.columnconfigure(1, weight=1, minsize=550)
         self.rowconfigure(3, weight=1, minsize=150)
         self.rowconfigure(4, weight=1, minsize=150)
@@ -70,12 +69,12 @@ class MainFrame(ttk.Frame):
 
         # Prompt
         self.prompt = PromptBox(self, "Prompt", width=80, height=5,
-                                adprompt_path=self.app_config.setdefault('adprompt_path', "adprompt"),
+                                negative=False, adprompt_path=self.app_config.setdefault('adprompt_path', "adprompt"),
                                 adprompt_history=self.app_config.setdefault('adprompt_history', []))
         self.prompt.grid(column=1, row=3, sticky=E+W+N+S, padx=5, pady=5)
         self.prompt.add_history()
         self.neg_prompt = PromptBox(self, "Negative prompt", width=80, height=5,
-                                    adprompt_path=self.app_config['adprompt_path'],
+                                    negative=True, adprompt_path=self.app_config['adprompt_path'],
                                     adprompt_history=self.app_config.setdefault('neg_adprompt_history', []))
         self.neg_prompt.grid(column=1, row=4, sticky=E+W+N+S, padx=5, pady=5)
         self.prompt.add_history()
@@ -99,7 +98,7 @@ class MainFrame(ttk.Frame):
 
         # Inference steps
         self.steps = DasScala(self, "Inference steps",
-                              from_=0, to=200, step=1, init=50, tickinterval=25,
+                              from_=1, to=200, step=1, init=50, tickinterval=25,
                               length=450, width=15, orient=VERTICAL, entry_pos=N)
         self.steps.grid(column=2, row=3, rowspan=4, sticky=N+S, padx=5, pady=5)
 

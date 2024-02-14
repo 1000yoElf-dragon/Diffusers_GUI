@@ -9,22 +9,22 @@ class FileCache(QueueMap):
         super(FileCache, self).__init__(max_size)
         self.cache_saved = cache_saved
 
-    def load(self, filename: str):
-        filename = os.path.abspath(filename).lower()
+    def load(self, filename: str, info=None, return_all: bool = False):
+        filename = os.path.realpath(filename)
         stats = os.stat(filename)
         if filename in self and self[filename][1] == stats:
             self.to_back(filename)
             return self[filename][0]
         else:
             content = self.load_from_disk(filename)
-            self.push(filename, (content, stats))
+            self.push(filename, (content, stats, info))
         return content
 
-    def save(self, filename: str, content, cache_saved: bool = None):
-        filename = os.path.abspath(filename).lower()
+    def save(self, filename: str, content, cache_saved: bool = None, info=None):
+        filename = os.path.realpath(filename)
         self.save_to_disk(filename, content)
         if cache_saved or cache_saved is None and self.cache_saved:
-            self.push(filename, (content, os.stat(filename)))
+            self.push(filename, (content, os.stat(filename), info))
 
     def load_from_disk(self, filename: str):
         raise NotImplementedError("Virtual metod overload required")

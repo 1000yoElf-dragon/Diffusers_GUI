@@ -1,12 +1,11 @@
 import os
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
-from tkinter.scrolledtext import ScrolledText
 from numpy import random
 from PIL import ImageTk, Image
 
-from utils import image_fit, not_include, normalize_space_commas, append_non_zero
-from filehandlers import text_files, image_files
+from utils import image_fit
+from filehandlers import image_files
 
 
 class VarChecker:
@@ -64,9 +63,11 @@ class CheckBox(ttk.Frame):
         row = col = 0
         for name, (label, init) in buttons.items():
             var = IntVar(value=init)
+            chkbtn = ttk.Checkbutton(self, text=label, variable=var)
+            chkbtn.grid(column=col, row=row, padx=5, pady=5)
             self.buttons[name] = {
                 'var': var,
-                'checkbutton': ttk.Checkbutton(self, text=label, variable=var).grid(column=col, row=row, padx=5, pady=5)
+                'checkbutton': chkbtn
             }
             if orient == HORIZONTAL:
                 self.columnconfigure(col, weight=1)
@@ -189,194 +190,6 @@ class ChooseDir(HistoryCombo):
         folder = os.path.abspath(self.value.get() or "")
         self.value.set(folder)
         return folder
-
-
-class PromptBox(ttk.LabelFrame):
-    def __init__(self, parent, label, width, height,
-                 adprompt_path, adprompt_history, adprompt_max_history=20,
-                 init="", maxundo=8192, max_history=50):
-        super().__init__(parent, text=label)
-        self.adprompt_path = adprompt_path
-        self.icon = PhotoImage(file="Icons/icons8-add-32.png")
-
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(1, weight=1)
-
-        self.history = []
-        self.current = -1
-        self.max_history = max_history
-
-        self.text = ScrolledText(self, width=width, height=height, undo=True, maxundo=maxundo, wrap=WORD)
-        self.text.grid(column=0, row=1, columnspan=2, sticky=W+E+N+S, padx=5, pady=5)
-        self.set(init)
-
-        self.adprompt = HistoryCombo(self, "adPrompt: ", width,
-                                     adprompt_history, max_history=adprompt_max_history,
-                                     is_eq_func=None, validator=not_include('\\/:*»<>|'), readonly=False)
-        self.adprompt.entry.bind('<FocusOut>', lambda *args: self.adprompt_validate())
-        self.plus_ad_button = ttk.Button(self.adprompt, image=self.icon,
-                                         command=lambda *args: self.plus_ad())
-        self.plus_ad_button.grid(column=2, row=0, padx=5, pady=5)
-        self.adprompt.grid(column=0, row=2, columnspan=2, sticky=W + E + N + S, padx=5, pady=5)
-
-        # Edit buttons
-        self.edit_buttons = Frame(self)
-        self.clear_button = ttk.Button(self.edit_buttons, text="Clear", command=lambda *args: self.clear())
-        self.clear_button.grid(column=0, row=0, sticky=E)
-
-        # History buttons
-        self.history_buttons = Frame(self)
-        self.back_button = ttk.Button(self.history_buttons, text="<",
-                                      command=lambda *args: self.back(), state=DISABLED)
-        self.back_button.grid(column=0, row=0, sticky=E)
-        self.forward_button = ttk.Button(self.history_buttons, text=">",
-                                         command=lambda *args: self.forward(), state=DISABLED)
-        self.forward_button.grid(column=1, row=0, sticky=E)
-
-        self.edit_buttons.grid(column=0, row=0, sticky=W, padx=5, pady=5)
-        self.history_buttons.grid(column=1, row=0, sticky=E, padx=5, pady=5)
-
-    def adprompt_validate(self):
-        adprompt = self.adprompt.get().strip()
-        if not adprompt.strip('+ \t\n\r'):
-            self.adprompt.set("?")
-            return "?"
-        if adprompt[0] == '+':
-            adprompt = '? ' + adprompt
-        if adprompt[-1] == '+':
-            adprompt += ' ?'
-        if '?' not in adprompt:
-            adprompt = '? + ' + adprompt
-        self.adprompt.set(adprompt)
-        return adprompt
-
-    def plus_ad(self):
-        pass
-
-    def read_adprompt(self, name, missed: dict = None):
-        if not name:
-            return ""
-        if missed is None:
-            missed = {}
-        name = name.strip().lower()
-        if name in missed:
-            return ""
-        if name[0] in {'"', "'"}:
-            closing = name.find(name[0], 1)
-            if closing != len(name) - 1:
-                missed[name] = "Wrong quotes"
-                return ""
-            return self.read_adprompt(name[1:-1], missed)
-        try:
-            filename = name
-            if not os.path.dirname(filename):
-                if not os.path.splitext(filename)[1]:
-                    filename += ".txt"
-                filename = os.path.join(self.adprompt_path, filename)
-            return text_files.load(filename).strip()
-        except Exception as error:
-            missed[name] = str(error)
-            return ""
-
-    def get(self):
-        missed = {}
-        prompt = self.text.get('0.0', END)
-        prompt_seq = []
-        length = len(prompt)
-        pos = 0
-        while pos < length:
-            next_pos = prompt.find('@<', pos)
-            next_pos = next_pos if next_pos != -1 else length
-            append_non_zero(prompt_seq, prompt[pos:next_pos].strip())
-            pos = next_pos+2
-            if pos >= length:
-                break
-            next_pos = prompt.find('>', pos)
-            next_pos = next_pos if next_pos != -1 else length
-            append_non_zero(prompt_seq, self.read_adprompt(prompt[pos:next_pos], missed))
-            pos = next_pos+1
-
-        result_seq = []
-
-        for compound in self.adprompt_validate().split('+'):
-            compound = compound.strip()
-            if not compound:
-                continue
-            if compound[0] == '?':
-                result_seq += prompt_seq
-            else:
-                if compound:
-                    result_seq.append(self.read_adprompt(compound, missed))
-
-        if missed:
-            message = "Can't load adprompt(s). Continue anyway?\n\n"
-            for i, (name, error) in enumerate(missed.items()):
-                message += f"{name}: {error}\n"
-                if i >= 10:
-                    message += '...'
-                    break
-            if not messagebox.askokcancel("Adprompt ERROR", message):
-                raise ValueError("Wrong adprompt(s)")
-
-        result = normalize_space_commas(', '.join(result_seq))
-        return result
-
-    def set(self, txt):
-        self.text.delete('0.0', END)
-        self.text.insert('0.0', txt)
-        self.text.edit_modified(True)
-
-    def update_buttons(self):
-        if len(self.history) == 0:  # or self.current == 0 and not self.text.edit_modified():
-            self.back_button.config(state=DISABLED)
-        else:
-            self.back_button.config(state=NORMAL)
-
-        if self.current >= len(self.history) - 1:
-            self.forward_button.config(state=DISABLED)
-        else:
-            self.forward_button.config(state=NORMAL)
-
-    def add_history(self):
-        self.adprompt.add_history()
-        if not self.history or self.text.edit_modified():
-            self.history.append(self.text.get('0.0', END))
-        elif 0 <= self.current < len(self.history):
-            self.history.append(self.history[self.current])
-            del self.history[self.current]
-        self.current = len(self.history) - 1
-        if len(self.history) > self.max_history:
-            self.history = self.history[-self.max_history:]
-        self.text.edit_modified(False)
-        self.update_buttons()
-
-    def focus(self):
-        self.text.focus()
-
-    def clear(self):
-        self.text.delete('0.0', END)
-        self.text.edit_modified(True)
-        self.update_buttons()
-
-    def forward(self):
-        if self.current < len(self.history)-1:
-            self.current += 1
-            self.set(self.history[self.current])
-            self.text.edit_modified(False)
-        self.update_buttons()
-
-    def back(self):
-        if self.current < 0:
-            return
-        if not self.text.edit_modified():
-            if self.current > 0:
-                self.current -= 1
-            else:
-                return
-        self.set(self.history[self.current])
-        self.text.edit_modified(False)
-        self.update_buttons()
 
 
 class SeedEntry(ttk.LabelFrame):
