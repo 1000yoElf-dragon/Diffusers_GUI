@@ -3,58 +3,37 @@ from tkinter import N, S, E, W, NW, SW, NE, SE, HORIZONTAL, VERTICAL, RIGHT
 from tkinter import ttk, messagebox
 from math import sqrt, floor
 from diffusers.utils import make_image_grid
-from yaml import YAMLError
 
+import cfg
 from widgets.common import HistoryCombo, DasScala, SeedEntry, ChooseDir, ImageBox, Size, CheckBox, InitImageBox
-from widgets.promptbox import PromptBox
+from widgets.promptbox import PromptBox, AdPromptList
 from diffusershandler import DiffusersHandler
-from utils import repo_key, check_bool_opt, file_naming, not_include, SubstituteImage, load_yaml, save_yaml
+from utils import repo_key, file_naming, not_include, save_yaml
 from filehandlers import image_files
 
 
-class MainFrame(ttk.Frame):
-    def __init__(self, root, config_file):
-        super(MainFrame, self).__init__(root, padding="3 3 12 12")
-
-        self.config_file = config_file
-
-        try:
-            self.app_config = load_yaml(self.config_file, default_fname="default.yml", default={})
-        except Exception as error:
-            if messagebox.askokcancel(
-                    title="Warning!", message="It seems configuration file is broken. Create default configuration?"
-            ):
-                try:
-                    self.app_config = load_yaml("default.yml", default={})
-                    if self.app_config is None:
-                        self.app_config = {}
-                except (OSError, IOError, YAMLError):
-                    self.app_config = {}
-            else:
-                raise error
+class InferenceTab(ttk.Frame):
+    def __init__(self, root):
+        super(InferenceTab, self).__init__(root, padding="3 3 12 12")
 
         self.diffusers_handler = DiffusersHandler(
-            cache_dir=self.app_config.setdefault('cache_dir', "cache"),
-            max_models=self.app_config.setdefault('max_models', 1),
-            use_cuda=check_bool_opt(self.app_config, 'use_cuda', True),
-            use_float16=check_bool_opt(self.app_config, 'use_float16', True),
-            hf_key=self.app_config['hf_key'] if 'hf_key' in self.app_config else None
+            cache_dir=cfg.config['cache_dir'],
+            max_models=cfg.config['max_models'],
+            use_cuda=cfg.config['use_cuda'],
+            use_float16=cfg.config['use_float16'],
+            hf_key=cfg.config['hf_key'] if 'hf_key' in cfg.config else None
         )
 
-        if 'substitute_image' in self.app_config:
-            self.substitute_image = SubstituteImage(self.app_config['substitute_image'])
-        else:
-            self.substitute_image = SubstituteImage("Icons/nsfw.png")
-
         self.grid(column=0, row=0, sticky=(N, W, E, S))
-        self.columnconfigure(1, weight=1, minsize=550)
+        self.columnconfigure(1, weight=1, minsize=400)
+        self.columnconfigure(4, weight=1, minsize=150)
         self.rowconfigure(3, weight=1, minsize=150)
         self.rowconfigure(4, weight=1, minsize=150)
 
         # Model repo
         self.repo = HistoryCombo(
             self, "Model repository: ", width=80,
-            history=self.app_config.setdefault('repo_history', []),
+            history=cfg.config['repo_history'],
             is_eq_func=lambda s1, s2: repo_key(s1) == repo_key(s2)
         )
         self.repo.grid(column=1, row=1, sticky=E+W, padx=5, pady=5)
@@ -68,16 +47,23 @@ class MainFrame(ttk.Frame):
         self.checkbox.grid(column=1, row=2, sticky=W, padx=5, pady=5)
 
         # Prompt
+        self.adprompt_list = AdPromptList(self)
+        self.adprompt_list.grid(row=3, column=1, rowspan=2, sticky=N+S+W+E)
+
         self.prompt = PromptBox(self, "Prompt", width=80, height=5,
-                                negative=False, adprompt_path=self.app_config.setdefault('adprompt_path', "adprompt"),
-                                adprompt_history=self.app_config.setdefault('adprompt_history', []))
+                                negative=False, adprompt_path=cfg.config['adprompt_path'],
+                                adprompt_history=cfg.config['adprompt_history'],
+                                adprompt_list=self.adprompt_list
+                                )
         self.prompt.grid(column=1, row=3, sticky=E+W+N+S, padx=5, pady=5)
-        self.prompt.add_history()
+        self.prompt.update_history()
         self.neg_prompt = PromptBox(self, "Negative prompt", width=80, height=5,
-                                    negative=True, adprompt_path=self.app_config['adprompt_path'],
-                                    adprompt_history=self.app_config.setdefault('neg_adprompt_history', []))
+                                    negative=True, adprompt_path=cfg.config['adprompt_path'],
+                                    adprompt_history=cfg.config['neg_adprompt_history'],
+                                    adprompt_list=self.adprompt_list
+                                    )
         self.neg_prompt.grid(column=1, row=4, sticky=E+W+N+S, padx=5, pady=5)
-        self.prompt.add_history()
+        self.prompt.update_history()
 
         # Guidance scale
         self.guidance = DasScala(self, "Guidance scale",
@@ -87,8 +73,7 @@ class MainFrame(ttk.Frame):
 
         # Initial image....
         self.init_img = InitImageBox(
-            self, "Initial image", width=20, history=self.app_config.setdefault('init_image_history', []),
-            default_image_file="Icons/noimage_gray.png"
+            self, "Initial image", width=20, history=cfg.config['init_image_history']
         )
         self.init_img.grid(column=1, row=6, rowspan=2, sticky=E+W, padx=5, pady=5)
 
@@ -107,8 +92,8 @@ class MainFrame(ttk.Frame):
         self.run_button.grid(column=2, row=7, padx=5, pady=5)
 
         # Output
-        self.output = ImageBox(self, width=640, height=640, default_image_file="Icons/noimage_gray.png")
-        self.output.grid(column=3, row=1, columnspan=2, rowspan=5, sticky=S, padx=5, pady=5)
+        self.output = ImageBox(self, width=640, height=640)
+        self.output.grid(column=3, row=1, columnspan=2, rowspan=5, sticky=N+S+W+E, padx=5, pady=5)
 
         # Image size
         self.imsize = Size(self, "Image size", (32, 4096), step=32, defaul=(512, 512))
@@ -118,18 +103,18 @@ class MainFrame(ttk.Frame):
         validate_fname = not_include('\\/:*?»<>|')
         def validate_prefix(val): return val.endswith("?.png") and validate_fname(val.removesuffix("?.png").rstrip("?"))
         self.prefix = HistoryCombo(
-            self, "Filename prefix: ", width=40,
-            history=self.app_config.setdefault('filename_prefix_history', []),
+            self, "Filename: ", width=40,
+            history=cfg.config['filename_prefix_history'],
             validator=validate_prefix
         )
-        if not self.app_config['filename_prefix_history']:
+        if not cfg.config['filename_prefix_history']:
             self.prefix.set("ai_painting_????.png")
         self.prefix.entry.config(justify=RIGHT)
         self.prefix.grid(column=4, row=6, sticky=SE, padx=5, pady=5)
 
         # Output dir
-        self.outdir = ChooseDir(self, "Save path: ", width=80, history=self.app_config.setdefault('outdir_history', []))
-        if not self.app_config['outdir_history']:
+        self.outdir = ChooseDir(self, "Save path: ", width=80, history=cfg.config['outdir_history'])
+        if not cfg.config['outdir_history']:
             self.outdir.set(os.path.abspath("ai_images"))
         self.outdir.grid(column=3, row=7, columnspan=2, sticky=W+E, padx=5, pady=5)
 
@@ -145,16 +130,16 @@ class MainFrame(ttk.Frame):
             os.makedirs(folder, exist_ok=True)
             template_fname_raw = self.prefix.get()
             fnames = file_naming(folder, template_fname_raw, '?')
-            self.outdir.add_history()
-            self.prefix.add_history()
+            self.outdir.update_history()
+            self.prefix.update_history()
 
             stage = "Get prompts"
             prompt_txt = self.prompt.get().strip()
             if prompt_txt:
-                self.prompt.add_history()
+                self.prompt.update_history()
             neg_prompt_txt = self.neg_prompt.get().strip()
             if neg_prompt_txt:
-                self.neg_prompt.add_history()
+                self.neg_prompt.update_history()
 
             stage = "Get parameters"
             guidance_val = self.guidance.get()
@@ -169,7 +154,7 @@ class MainFrame(ttk.Frame):
             stage = "Load repo"
             repo_name = self.repo.get()
             self.diffusers_handler.load_pipeline(repo_name, connect=connect)
-            self.repo.add_history()
+            self.repo.update_history()
 
             stage = "Inference"
             result = self.diffusers_handler.run(
@@ -190,7 +175,7 @@ class MainFrame(ttk.Frame):
                     image_files.save(fname, image)
                     save_yaml(fname + ".prm", properties)
                 else:
-                    to_show.append(self.substitute_image.subst(*actual_size))
+                    to_show.append(cfg.config['nsfw_image'])
 
             stage = "Show image"
             if to_show:
@@ -208,4 +193,4 @@ class MainFrame(ttk.Frame):
                 message=f"{type(error).__name__} ERROR:\n\n{str(error)}" +
                         (f"\n\n{str(info)}" if info else "")
             )
-        save_yaml(self.config_file, self.app_config)
+        cfg.save()

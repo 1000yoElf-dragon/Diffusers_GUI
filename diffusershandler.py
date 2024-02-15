@@ -67,7 +67,6 @@ class DiffusersHandler:
             'repo': repo_name,
             'variant': variant or "default",
             'dtype': str(torch_dtype),
-            'device': self.device_opts,
             'default_image_size': default_size
         }
         self.curr = {'model': model, 'txt2img': txt2img}
@@ -102,6 +101,7 @@ class DiffusersHandler:
             raise AssertionError("Model not loaded")
         params = {
             'model': self.curr['model'],
+            'device': self.device_opts,
             'prompt': prompt,
             'negative_prompt': negative_prompt,
             'guidance_scale': guidance_scale,

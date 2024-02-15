@@ -4,6 +4,7 @@ from tkinter import ttk, filedialog, messagebox
 from numpy import random
 from PIL import ImageTk, Image
 
+import cfg
 from utils import image_fit
 from filehandlers import image_files
 
@@ -136,7 +137,7 @@ class HistoryCombo(ttk.Frame):
         else:
             self.value.set(self.history[index])
 
-    def add_history(self):
+    def update_history(self):
         idx = self.entry.current()
         if idx == -1:
             value = self.value.get()
@@ -167,7 +168,7 @@ class ChooseDir(HistoryCombo):
 
     def __init__(self, parent, label, width, history, max_history=20):
         super().__init__(parent, label, width, history, max_history=max_history, is_eq_func=ChooseDir.samedir)
-        self.icon = PhotoImage(file="Icons/icons8-folder-windows-11-color-32.png")
+        self.icon = ImageTk.PhotoImage(cfg.ICONS['folder'])
 
         self.button = ttk.Button(self, image=self.icon, command=lambda *args: self.ask_dir())
         self.button.grid(column=2, row=0, sticky=W, padx=5, pady=5)
@@ -356,7 +357,7 @@ class Size(ttk.LabelFrame):
 
 
 class ImageBox(Canvas):
-    def __init__(self, parent, width, height, default_image_file=None):
+    def __init__(self, parent, width, height):
         super().__init__(parent, width=width, height=height)
         self.width, self.height = width, height
         self.original_image = self.image = None
@@ -365,14 +366,7 @@ class ImageBox(Canvas):
         self.veil = ImageTk.PhotoImage(Image.new('RGBA', (width, height), (240, 240, 240, 192)))
         self.veil_id = None
 
-        if default_image_file is not None:
-            def_img = image_files.load(default_image_file)
-            w, h = def_img.size
-            if w > self.width or h > self.height:
-                def_img = image_fit(def_img, self.width, self.height)
-        else:
-            def_img = Image.new('L', (width, height), 128)
-        self.default_image = ImageTk.PhotoImage(def_img)
+        self.default_image = ImageTk.PhotoImage(cfg.PLACEHOLDER_IMAGE.resize((width, height)))
         self.clear()
 
     def enable(self):
@@ -410,22 +404,22 @@ class InitImageBox(ttk.LabelFrame):
     image_file_exts = \
         "png?jpg?jpeg?jfif?jpe?pcx?tif?tiff?j2c?j2k?jp2?jpc?jpf?jpx?ico?bmp".replace("?", "?*.").split("?")
 
-    def __init__(self, parent, label, width, history, max_history=20, default_image_file=None):
+    def __init__(self, parent, label, width, history, max_history=20):
         self.checked_var = IntVar(value=0)
         self.chk_button = ttk.Checkbutton(text=label, variable=self.checked_var, command=lambda *args: self.check())
 
         super().__init__(parent, labelwidget=self.chk_button)
-        self.icon = PhotoImage(file="Icons//icons8-opened-folder-windows-11-color-32.png")
         self.history = history
         self.active = False
 
         self.columnconfigure(1, weight=1)
 
-        self.image_box = ImageBox(self, 150, 150, default_image_file=default_image_file)
+        self.image_box = ImageBox(self, 150, 150)
         self.image_box.disable()
         self.image_box.grid(column=0, row=0, rowspan=3, sticky=W, padx=5, pady=5)
 
-        self.open_button = ttk.Button(self, image=self.icon, command=lambda *args: self.open(), state=DISABLED)
+        self.open_icon = ImageTk.PhotoImage(cfg.ICONS['open_file'])
+        self.open_button = ttk.Button(self, image=self.open_icon, command=lambda *args: self.open(), state=DISABLED)
         self.open_button.grid(column=1, row=0, sticky=E, padx=5, pady=5)
 
         self.file_combo = HistoryCombo(self, "Image file", width=width,
@@ -437,7 +431,7 @@ class InitImageBox(ttk.LabelFrame):
 
         self.slider = DasScala(
             self, "Strength",
-            from_=0.0, to=1.0, step=0.01, init=0.8, tickinterval=0.1,
+            from_=0.0, to=1.0, step=0.01, init=0.8, tickinterval=0.2,
             length=150, width=15, orient=HORIZONTAL, entry_pos=E
         )
         self.slider.disable()
@@ -489,4 +483,4 @@ class InitImageBox(ttk.LabelFrame):
         self.set(filedialog.askopenfilename(**opts))
 
     def add_history(self):
-        self.file_combo.add_history()
+        self.file_combo.update_history()

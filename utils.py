@@ -111,17 +111,9 @@ class QueueMap:
             yield self.pop()
 
 
-def load_yaml(fname: str, default_fname: str = None, default=None) -> dict:
-    try:
-        with open(fname, 'rt') as file:
-            return yaml.safe_load(file) or {}
-    except FileNotFoundError as error:
-        if default_fname is not None:
-            return load_yaml(default_fname, default)
-        if default is not None:
-            return default
-        else:
-            raise error
+def load_yaml(fname: str) -> dict:
+    with open(fname, 'rt') as file:
+        return yaml.safe_load(file) or {}
 
 
 def save_yaml(fname: str, mapping: dict):

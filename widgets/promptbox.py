@@ -2,18 +2,17 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
+from PIL import ImageTk
 
+import cfg
 from utils import not_include, normalize_space_commas, append_non_zero, strip_quotes
 from filehandlers import text_files
 from .common import HistoryCombo
 
 
-ADPROMPT_MAXLEN = 2048
-
-
 def load_text_file(filename, missed):
     try:
-        if os.path.getsize(filename) > ADPROMPT_MAXLEN:
+        if os.path.getsize(filename) > cfg.ADPROMPT_MAXLEN:
             missed[filename] = "File is too big"
             return None
         return text_files.load(filename).strip()
@@ -92,7 +91,7 @@ class ScrolledList(ttk.Frame):
 
 
 class AdPromptList(ttk.Frame):
-    def __init__(self, parent, return_command, label):
+    def __init__(self, parent):
         super(AdPromptList, self).__init__(parent)
 
         self.columnconfigure(1, weight=1, minsize=150)
@@ -100,7 +99,7 @@ class AdPromptList(ttk.Frame):
         self.rowconfigure(1, weight=1, minsize=50)
         self.rowconfigure(4, weight=1, minsize=50)
 
-        self.return_command = return_command
+        self.return_command = lambda result: None
 
         self.adprompt_path = ""
         self.old_adprompt_string = ""
@@ -110,7 +109,8 @@ class AdPromptList(ttk.Frame):
         self.available_items = []
         self.available_names = []
 
-        self.label = ttk.Label(self, text=label)
+        self.label_var = tk.StringVar()
+        self.label = ttk.Label(self, textvariable=self.label_var)
         self.label.grid(row=0, column=0, columnspan=4, padx=5, pady=5)
 
         # Choosen list
@@ -122,15 +122,19 @@ class AdPromptList(ttk.Frame):
         self.available_list.grid(row=1, column=3, rowspan=4, sticky=tk.N + tk.S + tk.W + tk.E, padx=5, pady=5)
 
         # Ordering buttons
-        self.move_up_button = ttk.Button(self, text="^", width=5, command=lambda *args: self.move_up())
+        self.arrow_up = ImageTk.PhotoImage(cfg.ICONS['arrow_up'])
+        self.arrow_down = ImageTk.PhotoImage(cfg.ICONS['arrow_down'])
+        self.move_up_button = ttk.Button(self, image=self.arrow_up, command=lambda *args: self.move_up())
         self.move_up_button.grid(row=2, column=0, padx=5, pady=5)
-        self.move_down_button = ttk.Button(self, text="v", width=5, command=lambda *args: self.move_down())
+        self.move_down_button = ttk.Button(self, image=self.arrow_down, command=lambda *args: self.move_down())
         self.move_down_button.grid(row=3, column=0, padx=5, pady=5)
 
         # Selection buttons
-        self.choose_button = ttk.Button(self, text="<<", command=lambda *args: self.choose())
+        self.arrow_left = ImageTk.PhotoImage(cfg.ICONS['arrow_left'])
+        self.arrow_trash = ImageTk.PhotoImage(cfg.ICONS['arrow_trash'])
+        self.choose_button = ttk.Button(self, image=self.arrow_left, command=lambda *args: self.choose())
         self.choose_button.grid(row=2, column=2, padx=5, pady=5)
-        self.drop_button = ttk.Button(self, text=">X", command=lambda *args: self.trash())
+        self.drop_button = ttk.Button(self, image=self.arrow_trash, command=lambda *args: self.trash())
         self.drop_button.grid(row=3, column=2, padx=5, pady=5)
 
         # Opposite checkbox
@@ -147,8 +151,16 @@ class AdPromptList(ttk.Frame):
         self.cancel_button = ttk.Button(self.finalize_frame, text="Cancel", command=lambda *args: self.cancel())
         self.cancel_button.grid(row=0, column=1, padx=5, pady=5)
         self.finalize_frame.grid(row=6, column=0, columnspan=4, sticky=tk.E, padx=5, pady=5)
+        self.first_bind_id = self.bind('<Visibility>', lambda *args: self.hide_at_start())
 
-    def activate(self, adprompt_path, adprompt_string, negative):
+    def hide_at_start(self):
+        self.unbind('<Visibility>', self.first_bind_id)
+        self.grid_remove()
+
+    def activate(self, label, adprompt_path, adprompt_string, negative, return_command):
+        self.label_var.set(label)
+
+        self.return_command = return_command
         self.adprompt_path = adprompt_path
         self.old_adprompt_string = adprompt_string
         self.negative = negative
@@ -250,13 +262,13 @@ class AdPromptList(ttk.Frame):
 class PromptBox(ttk.LabelFrame):
 
     def __init__(self, parent, label, width, height,
-                 negative, adprompt_path, adprompt_history, adprompt_max_history=20,
+                 negative, adprompt_path, adprompt_history,
+                 adprompt_list: AdPromptList, adprompt_max_history=20,
                  init="", maxundo=8192, max_history=50):
         super().__init__(parent, text=label)
 
         self.negative = negative
         self.adprompt_path = adprompt_path
-        self.icon = tk.PhotoImage(file="Icons/icons8-add-32.png")
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
@@ -266,13 +278,7 @@ class PromptBox(ttk.LabelFrame):
         self.current = -1
         self.max_history = max_history
 
-        self.adprompt_list = AdPromptList(
-            parent, lambda result: self.exit_apl(result),
-            label=f"Choose additions to the {'negative ' if negative else ''}prompt"
-        )
-        self.adprompt_list.grid(row=3, column=1, rowspan=2, sticky=tk.N+tk.S+tk.W+tk.E)
-        self.adprompt_list.lower()
-        self.adprompt_list.grid_remove()
+        self.adprompt_list = adprompt_list
 
         self.text = ScrolledText(self, width=width, height=height, undo=True, maxundo=maxundo, wrap=tk.WORD)
         self.text.grid(column=0, row=1, columnspan=2, sticky=tk.W+tk.E+tk.N+tk.S, padx=5, pady=5)
@@ -282,7 +288,9 @@ class PromptBox(ttk.LabelFrame):
                                      adprompt_history, max_history=adprompt_max_history,
                                      is_eq_func=None, validator=not_include('\\/:*»<>|'), readonly=False)
         self.adprompt.entry.bind('<FocusOut>', lambda *args: self.adprompt_validate())
-        self.plus_ad_button = ttk.Button(self.adprompt, image=self.icon,
+
+        self.plus_icon = ImageTk.PhotoImage(cfg.ICONS['plus'])
+        self.plus_ad_button = ttk.Button(self.adprompt, image=self.plus_icon,
                                          command=lambda *args: self.plus_ad())
         self.plus_ad_button.grid(column=2, row=0, padx=5, pady=5)
         self.adprompt.grid(column=0, row=2, columnspan=2, sticky=tk.W + tk.E + tk.N + tk.S, padx=5, pady=5)
@@ -293,11 +301,13 @@ class PromptBox(ttk.LabelFrame):
         self.clear_button.grid(column=0, row=0, sticky=tk.E)
 
         # History buttons
+        self.forward_icon = ImageTk.PhotoImage(cfg.ICONS['forward'])
+        self.backward_icon = ImageTk.PhotoImage(cfg.ICONS['backward'])
         self.history_buttons = ttk.Frame(self)
-        self.back_button = ttk.Button(self.history_buttons, text="<",
+        self.back_button = ttk.Button(self.history_buttons, image=self.backward_icon,
                                       command=lambda *args: self.back(), state=tk.DISABLED)
         self.back_button.grid(column=0, row=0, sticky=tk.E)
-        self.forward_button = ttk.Button(self.history_buttons, text=">",
+        self.forward_button = ttk.Button(self.history_buttons, image=self.forward_icon,
                                          command=lambda *args: self.forward(), state=tk.DISABLED)
         self.forward_button.grid(column=1, row=0, sticky=tk.E)
 
@@ -319,11 +329,14 @@ class PromptBox(ttk.LabelFrame):
         return adprompt
 
     def plus_ad(self):
-        self.adprompt_list.activate(self.adprompt_path, self.adprompt_validate(), self.negative)
+        self.adprompt_list.activate(
+            label=f"Choose additions to the {'negative ' if self.negative else ''}prompt",
+            adprompt_path=self.adprompt_path, adprompt_string=self.adprompt_validate(), negative=self.negative,
+            return_command=lambda result: self.adprompt.set(result)
+        )
 
     def exit_apl(self, result):
         self.adprompt.set(result)
-        self.adprompt_list.grid_remove()
 
     def get(self):
         missed = {}
@@ -387,8 +400,8 @@ class PromptBox(ttk.LabelFrame):
         else:
             self.forward_button.config(state=tk.NORMAL)
 
-    def add_history(self):
-        self.adprompt.add_history()
+    def update_history(self):
+        self.adprompt.update_history()
         if not self.history or self.text.edit_modified():
             self.history.append(self.text.get('0.0', tk.END))
         elif 0 <= self.current < len(self.history):
