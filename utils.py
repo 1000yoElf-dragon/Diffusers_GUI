@@ -3,7 +3,7 @@ from PIL import Image
 import yaml
 import re
 from heapq import heapify, heappop, heappushpop
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
 
 class QueueMap:
@@ -184,6 +184,29 @@ def image_fit(image: Image.Image, width: int, height: int, grid: int = 0) -> Ima
     return image
 
 
+def get_available_filename(folder, template, mask='?'):
+    if not os.path.exists(folder):
+        return template.replace(mask, '0')
+    begin = template.find(mask)
+    end = template.rfind(mask) + 1
+    prefix = template[:begin]
+    suffix = template[end:]
+    digits = end - begin
+    index = 0
+    for file in os.scandir(folder):
+        name = file.name
+        if name.startswith(prefix) and name.endswith(suffix):
+            num = name.removeprefix(prefix).removesuffix(suffix)
+            if len(num) == digits:
+                try:
+                    index = max(index, int(num))
+                except ValueError:
+                    continue
+    num = str(index+1)
+    zeros = digits - len(num)
+    return prefix + '0' * zeros + num + suffix
+
+
 def file_naming(folder, template, mask='?'):
     begin = template.find(mask)
     end = template.rfind(mask)+1
@@ -229,3 +252,7 @@ class SubstituteImage:
         x = (w - width) // 2
         y = (h - height) // 2
         return image.crop((x, y, x + width, y + height))
+
+
+def clip(x: Union[int, float], lower: Union[int, float], upper: Union[int, float]) -> Union[int, float]:
+    return max(min(x, upper), lower)

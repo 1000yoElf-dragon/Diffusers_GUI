@@ -37,5 +37,4 @@ if __name__ == '__main__':
     inference_tab = InferenceTab(notebook)
     notebook.add(inference_tab, text="Inference")
 
-
     root.mainloop()

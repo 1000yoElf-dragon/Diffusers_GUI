@@ -1,4 +1,5 @@
 import os
+import tkinter as tk
 from tkinter import N, S, E, W, NW, SW, NE, SE, HORIZONTAL, VERTICAL, RIGHT
 from tkinter import ttk, messagebox
 from math import sqrt, floor
@@ -7,6 +8,7 @@ from diffusers.utils import make_image_grid
 import cfg
 from widgets.common import HistoryCombo, DasScala, SeedEntry, ChooseDir, ImageBox, Size, CheckBox, InitImageBox
 from widgets.promptbox import PromptBox, AdPromptList
+from widgets.imagebox import ScalableImage, SaveImage
 from diffusershandler import DiffusersHandler
 from utils import repo_key, file_naming, not_include, save_yaml
 from filehandlers import image_files
@@ -26,7 +28,7 @@ class InferenceTab(ttk.Frame):
 
         self.grid(column=0, row=0, sticky=(N, W, E, S))
         self.columnconfigure(1, weight=1, minsize=400)
-        self.columnconfigure(4, weight=1, minsize=150)
+        self.columnconfigure(3, weight=1, minsize=400)
         self.rowconfigure(3, weight=1, minsize=150)
         self.rowconfigure(4, weight=1, minsize=150)
 
@@ -38,13 +40,17 @@ class InferenceTab(ttk.Frame):
         )
         self.repo.grid(column=1, row=1, sticky=E+W, padx=5, pady=5)
 
+        # Image size
+        self.imsize = Size(self, "Image size", (32, 4096), step=32, defaul=(512, 512))
+        self.imsize.grid(column=1, row=2, sticky=tk.W, padx=5, pady=5)
+
         # Checkbuttons
         checkbuttons = {
             'nsfw': ("NSFW protection", True),
-            'connect': ("Connect to HuggingFace", True)
+            'connect': ("Connect to HuggingFace", True),
         }
-        self.checkbox = CheckBox(self, checkbuttons)
-        self.checkbox.grid(column=1, row=2, sticky=W, padx=5, pady=5)
+        self.checkbox = CheckBox(self, checkbuttons, orient=tk.VERTICAL)
+        self.checkbox.grid(column=1, row=2, sticky=tk.NE, padx=5, pady=5)
 
         # Prompt
         self.adprompt_list = AdPromptList(self)
@@ -75,11 +81,11 @@ class InferenceTab(ttk.Frame):
         self.init_img = InitImageBox(
             self, "Initial image", width=20, history=cfg.config['init_image_history']
         )
-        self.init_img.grid(column=1, row=6, rowspan=2, sticky=E+W, padx=5, pady=5)
+        self.init_img.grid(column=3, row=2, rowspan=2, sticky=tk.NE+tk.NW, padx=5, pady=5)
 
         # Seed
         self.seed = SeedEntry(self, "Random generator seed")
-        self.seed.grid(column=2, row=1, rowspan=2, sticky=(W, E), padx=5, pady=5)
+        self.seed.grid(column=2, row=2, sticky=(W, E), padx=5, pady=5)
 
         # Inference steps
         self.steps = DasScala(self, "Inference steps",
@@ -91,32 +97,7 @@ class InferenceTab(ttk.Frame):
         self.run_button = ttk.Button(self, text="Run", command=lambda *args: self.run())
         self.run_button.grid(column=2, row=7, padx=5, pady=5)
 
-        # Output
-        self.output = ImageBox(self, width=640, height=640)
-        self.output.grid(column=3, row=1, columnspan=2, rowspan=5, sticky=N+S+W+E, padx=5, pady=5)
 
-        # Image size
-        self.imsize = Size(self, "Image size", (32, 4096), step=32, defaul=(512, 512))
-        self.imsize.grid(column=3, row=6, sticky=SW, padx=5, pady=5)
-
-        # File name prefix
-        validate_fname = not_include('\\/:*?»<>|')
-        def validate_prefix(val): return val.endswith("?.png") and validate_fname(val.removesuffix("?.png").rstrip("?"))
-        self.prefix = HistoryCombo(
-            self, "Filename: ", width=40,
-            history=cfg.config['filename_prefix_history'],
-            validator=validate_prefix
-        )
-        if not cfg.config['filename_prefix_history']:
-            self.prefix.set("ai_painting_????.png")
-        self.prefix.entry.config(justify=RIGHT)
-        self.prefix.grid(column=4, row=6, sticky=SE, padx=5, pady=5)
-
-        # Output dir
-        self.outdir = ChooseDir(self, "Save path: ", width=80, history=cfg.config['outdir_history'])
-        if not cfg.config['outdir_history']:
-            self.outdir.set(os.path.abspath("ai_images"))
-        self.outdir.grid(column=3, row=7, columnspan=2, sticky=W+E, padx=5, pady=5)
 
         for child in self.winfo_children():
             child.grid_configure(padx=5, pady=5)
@@ -125,14 +106,6 @@ class InferenceTab(ttk.Frame):
     def run(self):
         stage = "Runtime"
         try:
-            stage = "Output directory"
-            folder = self.outdir.get()
-            os.makedirs(folder, exist_ok=True)
-            template_fname_raw = self.prefix.get()
-            fnames = file_naming(folder, template_fname_raw, '?')
-            self.outdir.update_history()
-            self.prefix.update_history()
-
             stage = "Get prompts"
             prompt_txt = self.prompt.get().strip()
             if prompt_txt:
@@ -167,25 +140,25 @@ class InferenceTab(ttk.Frame):
             stage = "Save results"
             to_show = []
             actual_size = None
-            for image, properties in result:
-                actual_size = (properties['width'], properties['height'])
+            for image, params in result:
+                if actual_size is None:
+                    actual_size = (params['width'], params['height'])
+                    self.imsize.set(actual_size)
+
                 if image is not None:
-                    fname = next(fnames)
-                    to_show.append(image)
-                    image_files.save(fname, image)
-                    save_yaml(fname + ".prm", properties)
+                    SaveImage(tk._default_root, image, params)
+                    #to_show.append(image)
                 else:
                     to_show.append(cfg.config['nsfw_image'])
 
-            stage = "Show image"
-            if to_show:
-                length = len(to_show)
-                rows = floor(sqrt(length))
-                cols = (length - 1) // rows + 1
-                im_grid = make_image_grid(to_show, rows, cols)
-                self.output.set(im_grid)
-            if actual_size:
-                self.imsize.set(actual_size)
+            #stage = "Show image"
+            #if to_show:
+            #    length = len(to_show)
+            #    rows = floor(sqrt(length))
+            #    cols = (length - 1) // rows + 1
+            #   im_grid = make_image_grid(to_show, rows, cols)
+            #    self.output.set_image(im_grid)
+
         except Exception as error:
             info = self.diffusers_handler.err_info
             messagebox.showerror(

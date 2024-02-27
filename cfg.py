@@ -53,9 +53,9 @@ default_config = dict(
     adprompt_history=[],
     neg_adprompt_history=[],
     init_image_history=[],
-    filename_prefix_history=[],
     outdir_history=[],
-
+    filename_prefix_history=[],
+    filename_ext_history=[".png", ".jpg"]
 )
 config: Optional[dict] = default_config.copy()
 

@@ -1,4 +1,5 @@
 import os
+import tkinter as tk
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
 from numpy import random
@@ -65,7 +66,7 @@ class CheckBox(ttk.Frame):
         for name, (label, init) in buttons.items():
             var = IntVar(value=init)
             chkbtn = ttk.Checkbutton(self, text=label, variable=var)
-            chkbtn.grid(column=col, row=row, padx=5, pady=5)
+            chkbtn.grid(column=col, row=row, sticky=tk.W, padx=5, pady=5)
             self.buttons[name] = {
                 'var': var,
                 'checkbutton': chkbtn
@@ -432,7 +433,7 @@ class InitImageBox(ttk.LabelFrame):
         self.slider = DasScala(
             self, "Strength",
             from_=0.0, to=1.0, step=0.01, init=0.8, tickinterval=0.2,
-            length=150, width=15, orient=HORIZONTAL, entry_pos=E
+            length=300, width=15, orient=HORIZONTAL, entry_pos=E
         )
         self.slider.disable()
         self.slider.grid(column=1, row=2, sticky=W+E, padx=5, pady=5)
